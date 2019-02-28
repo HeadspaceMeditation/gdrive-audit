@@ -26,15 +26,33 @@ class NamedTupleFactory(object):
         self.require_all_fields = require_all_fields
         self.fields = field_names
         self.encoders = {}
-        self._nested_coders = {}
         self.decoders = {}
+        self.nested_coders = {}
         field_names = set(field_names)
+
         if encoders and isinstance(encoders, dict):
-            self.encoders = {k:v for k,v in encoders.iteritems() if k in field_names and callable(v)}
-            self._nested_coders = {k: v for k, v in self.encoders.iteritems() if isinstance(v, NamedTupleFactory)}
-            self.decoders = self._nested_coders.copy()
+            for k, v in encoders.iteritems():
+                if k not in field_names:
+                    continue
+                if not callable(v):
+                    continue
+                self.encoders[k] = v
+                if isinstance(v, NamedTupleFactory):
+                    self.nested_coders[k] = v
+
+        self.decoders = dict(self.nested_coders)
+
         if decoders and isinstance(decoders, dict):
-            self.decoders.update({k:v for k,v in decoders.iteritems() if k in field_names and callable(v)})
+            for k, v in decoders.iteritems():
+                if k not in field_names:
+                    continue
+                if not callable(v):
+                    continue
+                self.decoders[k] = v
+                if k not in self.nested_coders and isinstance(v, NamedTupleFactory):
+                    self.encoders[k] = v
+                    self.nested_coders[k] = v
+
         self.data_type = namedtuple(type_name, self.fields)
 
     def _is_list_of_objects(self, input):
@@ -92,8 +110,8 @@ class NamedTupleFactory(object):
         if len(args) == 1 and isinstance(args[0], dict):
             data = args[0]
             init_args = {f: data.get(f) for f in self.fields}
-            if self._nested_coders:
-                init_args = {k: self._nested_coders[k](v) if k in self._nested_coders and v else v
+            if self.nested_coders:
+                init_args = {k: self.nested_coders[k](v) if k in self.nested_coders and v else v
                              for k, v in init_args.iteritems()}
             return self.data_type(**init_args)
 

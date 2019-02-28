@@ -23,17 +23,13 @@ def datetime_with_utc_tz(dt=None):
 def iso_utcz_strftime(dt):
     """
     Get iso formatted utc date time string formatted with 'Z' notation.
-    Truncate to millisecond precision to maximize compatibility.
     :param dt:
     :return:
     """
     if not isinstance(dt, datetime):
         raise ValueError("Datetime object expected.")
     dt = datetime_with_utc_tz(dt)
-    iso_time_seconds = datetime.strftime(dt, "%Y-%m-%dT%H:%M:%S")
-    iso_time_milliseconds = datetime.strftime(dt, ".%s")[0:3]
-    time_as_utcstring = iso_time_seconds + iso_time_milliseconds + "Z"
-    return time_as_utcstring
+    return datetime.strftime(dt, "%Y-%m-%dT%H:%M:%SZ")
 
 
 def iso_strptime(dt_string):
