@@ -43,15 +43,14 @@ class GoogleDriveAuditReport(object):
             raise ValueError("'credentials' must be a json formatted credential string, "
                              "or a filename pointing to a json formatted credential string.")
 
-        if not credentials.find("{"):
+        try:
+            credentials = json.loads(credentials)
+        except:
             # This is probably a filename and not a json formatted string.
             # Error will be raised if it is not a valid file path.
             f = open(credentials, "rb")
             credentials = f.read().decode('utf-8')
             f.close()
-
-        # Attempt to read json credentials // allow to raise
-        credentials = json.loads(credentials)
 
         if not admin_user:
             raise ValueError('admin_user must be supplied (Google email address of user with administrative rights.')
