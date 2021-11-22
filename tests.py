@@ -4,7 +4,7 @@ from external.types import NamedTupleFactory
 import json
 from external.timeutils import iso_strptime, iso_utcz_strftime
 import datetime
-import pytz
+import dateutil
 
 
 class NamedTupleFactoryTest(TestCase):
@@ -61,7 +61,7 @@ class NamedTupleFactoryTest(TestCase):
         some_dict = {"e": 1, "t": "2019-02-26T00:00:01Z"}
         my_instance = self.date_type_factory.from_python(some_dict)
         self.assertEqual(my_instance.e, 1)
-        self.assertEqual(my_instance.t, datetime.datetime(2019, 2, 26, 0, 0, 1, tzinfo=pytz.timezone('utc')))
+        self.assertEqual(my_instance.t, datetime.datetime(2019, 2, 26, 0, 0, 1, tzinfo=dateutil.tz.UTC))
 
     def test_that_complex_types_can_be_encoded(self):
         some_dict = {"e": 1, "t": "2019-02-26T00:00:01Z"}
@@ -75,7 +75,7 @@ class NamedTupleFactoryTest(TestCase):
         my_instance = self.complex_type_factory.from_python(some_dict)
         self.assertEqual(my_instance.f, 2)
         self.assertEqual(my_instance.complex.e, 1)
-        self.assertEqual(my_instance.complex.t, datetime.datetime(2019, 2, 26, 0, 0, 1, tzinfo=pytz.timezone('utc')))
+        self.assertEqual(my_instance.complex.t, datetime.datetime(2019, 2, 26, 0, 0, 1, tzinfo=dateutil.tz.UTC))
 
     def test_that_complex_nested_types_can_be_decoded_and_re_encoded(self):
         some_dict = {"f": 2, "complex":{"e": 1, "t": "2019-02-26T00:00:01Z"}}

@@ -1,6 +1,6 @@
 from datetime import datetime
 import time
-import pytz
+import dateutil
 import dateutil.parser
 
 
@@ -14,9 +14,9 @@ def datetime_with_utc_tz(dt=None):
     if not isinstance(dt, datetime):
         return dt
     elif dt.tzinfo:
-        dt = dt.astimezone(pytz.utc)
+        dt = dt.astimezone(dateutil.tz.UTC)
     else:
-        dt.replace(tzinfo=pytz.utc)
+        dt.replace(tzinfo=dateutil.tz.UTC)
     return dt
 
 
@@ -40,7 +40,7 @@ def iso_strptime(dt_string):
     """
     dt = dateutil.parser.parse(dt_string)
     if not dt.tzinfo:
-        dt.replace(tzinfo=pytz.utc)
+        dt.replace(tzinfo=dateutil.tz.UTC)
     return dt
 
 

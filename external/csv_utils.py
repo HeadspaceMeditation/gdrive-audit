@@ -4,7 +4,7 @@ import os
 import re
 import random
 from io import BytesIO
-from itertools import izip_longest
+from itertools import zip_longest
 
 
 # Mime types relevant to spreadsheets.
@@ -46,7 +46,7 @@ def prepend_column_headings_row(header_row, csv_data):
 
 def generate_random_chars(length=6):
     upper_alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    random_code = "".join(random.choice(upper_alpha) for _ in xrange(length))
+    random_code = "".join(random.choice(upper_alpha) for _ in range(length))
     return random_code
 
 
@@ -109,7 +109,7 @@ def purge_fields(records, fields):
     :return: Array of dicts with specified columns dropped.
     """
     to_purge = set(fields)
-    return [{k: v for k, v in record.iteritems() if k not in to_purge} for record in records]
+    return [{k: v for k, v in record.items() if k not in to_purge} for record in records]
 
 
 def randomize_fields(records, fields_to_randomize, length=6):
@@ -124,7 +124,7 @@ def randomize_fields(records, fields_to_randomize, length=6):
     to_randomize = set(fields_to_randomize)
     return [
         {field_name: generate_random_chars(length=length) if field_name in to_randomize else value
-         for field_name, value in record.iteritems()}
+         for field_name, value in record.items()}
         for record in records]
 
 
@@ -156,7 +156,7 @@ def dict_from_row(column_names, row):
         # Return None if row is empty.
         return None
     truncated_row = row[:len(column_names)]
-    return dict(izip_longest(column_names, truncated_row))
+    return dict(zip_longest(column_names, truncated_row))
 
 
 class PasswordProtectionError(Exception):
@@ -208,7 +208,7 @@ def write_records(writable, records):
     """
     writer = csv.writer(writable)
     fields = records[0].keys()
-    fields.sort()
+    sorted(fields)
     writer.writerow(fields)
     for record in records:
         row = [record.get(field) for field in fields]

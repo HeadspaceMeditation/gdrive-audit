@@ -39,7 +39,7 @@ class GoogleDriveAuditReport(object):
         self.should_audit_users = audit_users
         self.should_audit_drives = audit_team_drives
 
-        if not isinstance(credentials, basestring):
+        if not isinstance(credentials, str):
             raise ValueError("'credentials' must be a json formatted credential string, "
                              "or a filename pointing to a json formatted credential string.")
 
@@ -89,16 +89,21 @@ class GoogleDriveAuditReport(object):
             return
 
         logger.info("Beginning google drive audit of team drives.")
-        drive_client = GoogleDriveClient(self.credentials)
+
+        # When `useDomainAdminAccess` is set to True, you must connect as your admin user or it will *not* work.
+        drive_client = GoogleDriveClient(self.credentials,
+                                         connect_as=self.admin_user)
         folders = drive_client.team_drives()
         for folder in folders:
             files = None
             try:
                 files = drive_client.walk_tree(folder_id=folder.id,
+                                               team_drive_id=folder.id,
                                                path=folder.name,
                                                max_depth=30,
                                                my_folders_only=False,
-                                               exclude_folders_named=self.exclude_folders_named)
+                                               exclude_folders_named=self.exclude_folders_named,
+                                               team_drive=True)
                 if not files:
                     logger.info("No files found in team drive %s.", folder.name)
 
@@ -180,7 +185,7 @@ class GoogleDriveAuditReport(object):
             return None
 
         rows = []
-        for email, file_data in self.user_files.iteritems():
+        for email, file_data in self.user_files.items():
             for path, f in file_data:
                 row = {"User Drive": email, "path": path, "name": f.name, "mimeType": f.mimeType,
                        "trashed": f.trashed, "webViewLink": f.webViewLink,
@@ -209,7 +214,7 @@ class GoogleDriveAuditReport(object):
     def file_owners(file_obj):
         if not file_obj.owners:
             return ""
-        owner_emails = [o.emailAddress for o in file_obj.owners if isinstance(o.emailAddress, basestring)]
+        owner_emails = [o.emailAddress for o in file_obj.owners if isinstance(o.emailAddress, str)]
         return ",".join(owner_emails)
 
     @staticmethod
@@ -242,8 +247,36 @@ class GoogleDriveAuditReport(object):
         return ",".join("{}:D({})".format(p.role, p.allowFileDiscovery)
                         for p in public_permissions)
 
-    def export_team_drive_report(self):
+    def export_team_drive_report(self, output_file_name=None):
         """
-        Not yet implemented.
+        Export a csv file of the team drive permission report.
+        :return:
         """
-        logger.error("The team drive audit export has not yet been implemented.")
+        if not self.team_drive_files:
+            return None
+
+        rows = []
+        for email, file_data in self.team_drive_files.items():
+            for path, f in file_data:
+                row = {"Shared Drive": email, "path": path, "name": f.name, "mimeType": f.mimeType,
+                       "trashed": f.trashed, "webViewLink": f.webViewLink,
+                       "createdTime": _dt_fmt(f.createdTime), "modifiedTime": _dt_fmt(f.modifiedTime),
+                       "owners": self.file_owners(f),
+                       "lastModifyingUser": self.file_last_modified_by(f), "shared": f.shared,
+                       "viewersCanCopy": f.viewersCanCopyContent,
+                       "usersAndGroups": self.user_permission_string(f.permissions),
+                       "domains": self.domain_permission_string(f.permissions),
+                       "anyone": self.anyone_permission_string(f.permissions)
+                       }
+                rows.append(row)
+
+        out = csv_utils.records_to_string(rows)
+        if not output_file_name:
+            timestamp = time.mktime(datetime.now().timetuple())
+            output_file_name = "team_permission_report_%i.csv" % timestamp
+
+        logger.info("Writing team drive permissions report to '%s.'" % output_file_name)
+        f = open(output_file_name, "wb")
+        f.write(out.encode('utf-8'))
+        f.close()
+        logger.info("Finished.")

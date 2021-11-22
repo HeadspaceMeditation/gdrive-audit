@@ -3,3 +3,6 @@
 *.json
 venv*
 .idea
+
+# Local runner
+run.py

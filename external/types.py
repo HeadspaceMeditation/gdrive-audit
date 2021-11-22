@@ -1,5 +1,5 @@
 from collections import namedtuple
-from itertools import izip_longest
+from itertools import zip_longest
 
 
 class NamedTupleFactory(object):
@@ -31,7 +31,7 @@ class NamedTupleFactory(object):
         field_names = set(field_names)
 
         if encoders and isinstance(encoders, dict):
-            for k, v in encoders.iteritems():
+            for k, v in encoders.items():
                 if k not in field_names:
                     continue
                 if not callable(v):
@@ -43,7 +43,7 @@ class NamedTupleFactory(object):
         self.decoders = dict(self.nested_coders)
 
         if decoders and isinstance(decoders, dict):
-            for k, v in decoders.iteritems():
+            for k, v in decoders.items():
                 if k not in field_names:
                     continue
                 if not callable(v):
@@ -112,7 +112,7 @@ class NamedTupleFactory(object):
             init_args = {f: data.get(f) for f in self.fields}
             if self.nested_coders:
                 init_args = {k: self.nested_coders[k](v) if k in self.nested_coders and v else v
-                             for k, v in init_args.iteritems()}
+                             for k, v in init_args.items()}
             return self.data_type(**init_args)
 
         if len(args) == 1 and self._is_list_of_objects(args[0]):
@@ -125,7 +125,7 @@ class NamedTupleFactory(object):
         # Convert to dict and recurse.
         init_dict = {}
         if args:
-            init_dict = dict(izip_longest(self.fields, args))
+            init_dict = dict(zip_longest(self.fields, args))
         if kwargs:
             init_dict.update(kwargs)
         return self(init_dict)
@@ -156,7 +156,7 @@ class NamedTupleFactory(object):
             return obj
 
         mutable = obj._asdict()
-        for field, encoder in self.encoders.iteritems():
+        for field, encoder in self.encoders.items():
             value = mutable[field]
             if value is None:
                 continue
@@ -189,7 +189,7 @@ class NamedTupleFactory(object):
             return obj
 
         mutable = obj._asdict()
-        for field, decoder in self.decoders.iteritems():
+        for field, decoder in self.decoders.items():
             value = mutable[field]
             if value is None:
                 continue

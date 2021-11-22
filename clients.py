@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def generate_random_chars(length=6):
     upper_alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    random_code = "".join(random.choice(upper_alpha) for _ in xrange(length))
+    random_code = "".join(random.choice(upper_alpha) for _ in range(length))
     return random_code
 
 
@@ -42,10 +42,9 @@ class RetryCountExceeded(Exception):
 def execute_request(request, retry_count=0):
     try:
         return request.execute()
-    except HttpError, e:
-        # Http status error - look for auth problems.
+    except HttpError as e:
         logger.exception("Failure: %s", e)
-        raise BackendConfigurationError(e.message)
+        raise BackendConfigurationError(e)
     except (HttpLib2Error, IOError):
         # Transport error - retry
         if retry_count > 10:
@@ -83,7 +82,7 @@ class GoogleAdminClient(object):
         :param connect_as: Email address of proxy user whose permissions are to be emulated.
         :param authorization_scope: list of google authorization scopes.
         """
-        if isinstance(credentials, basestring):
+        if isinstance(credentials, str):
             credentials = json.loads(credentials)
         if not isinstance(credentials, dict):
             raise TypeError("Invalid credentials. Expected dictionary or json string represenation of dictionary.")
@@ -229,13 +228,26 @@ class GoogleDriveClient(GoogleAdminClient):
     folder_mime_type = 'application/vnd.google-apps.folder'
     gdrive_restrictions = NamedTupleFactory("GDriveRestrictions",
                                             ["adminManagedRestrictions", "copyRequiresWriterPermission",
-                                             "domainUsersOnly", "teamMembersOnly"])
+                                             "domainUsersOnly", "driveMembersOnly"])
+    gdrive_backgroundimagefile = NamedTupleFactory("GDriveBackgroundImageFile",
+                                            ["id", "xCoordinate", "yCoordinate", "width"])
+    gdrive_capabilities = NamedTupleFactory("GDriveCapabilities",
+                                            ["canAddChildren", "canChangeCopyRequiresWriterPermissionRestriction",
+                                             "canChangeDomainUsersOnlyRestriction", "canChangeDriveBackground",
+                                             "canChangeDriveMembersOnlyRestriction", "canComment", "canCopy",
+                                             "canDeleteChildren", "canDeleteDrive", "canDownload", "canEdit",
+                                             "canListChildren", "canManageMembers", "canReadRevisions",
+                                             "canRename", "canRenameDrive", "canShare", "canTrashChildren"])
     gdrive_team_drive = NamedTupleFactory("GDriveTeamDrive",
-                                          ["kind", "id", "name", "createdTime", "restrictions"],
-                                          encoders={"restrictions": gdrive_restrictions})
+                                          ["kind", "id", "name", "themeId", "colorRgb",
+                                           "backgroundImageFile", "backgroundImageLink", "capabilities",
+                                           "createdTime", "hidden", "restrictions"],
+                                           encoders={"backgroundImageFile": gdrive_backgroundimagefile,
+                                                     "restrictions": gdrive_restrictions,
+                                                     "capabilities": gdrive_capabilities})
     gdrive_team_drive_response = NamedTupleFactory("GDriveTeamDriveList",
-                                                   ["kind", "nextPageToken", "teamDrives"],
-                                                   encoders={"teamDrives": gdrive_team_drive})
+                                                   ["kind", "nextPageToken", "drives"],
+                                                   encoders={"drives": gdrive_team_drive})
 
     def connect(self, connect_as=None):
         """
@@ -255,8 +267,8 @@ class GoogleDriveClient(GoogleAdminClient):
             return
         self.client = build('drive', 'v3', credentials=(credentials.with_subject(self.proxy_user)))
 
-    def walk_tree(self, folder_id='root', path=None, depth=0, max_depth=20, my_folders_only=True,
-                  exclude_folders_named=None):
+    def walk_tree(self, folder_id='root', team_drive_id=None, path=None, depth=0, max_depth=20, my_folders_only=True,
+                  exclude_folders_named=None, team_drive=False):
         """
         Given a folder_id, iterate through all subfolders and return file data.
 
@@ -278,9 +290,9 @@ class GoogleDriveClient(GoogleAdminClient):
         if not path:
             path = folder_id
 
-        logger.info("Walking folder hierarchy %s: %s.", self.proxy_user, path)
+        logger.info("Walking folder hierarchy %s: %s (ID: %s).", self.proxy_user, path, folder_id)
 
-        file_entries = self.files(folder_id=folder_id)
+        file_entries = self.files(folder_id=folder_id, team_drive=team_drive, team_drive_id=team_drive_id, depth=depth)
         if not file_entries:
             return all_files
 
@@ -297,11 +309,11 @@ class GoogleDriveClient(GoogleAdminClient):
             return False
 
         for folder in folders:
-
-            if my_folders_only and not owner_is_me(folder):
-                # Only walk folders that I own.
-                logger.info("Skipping folder '%s/%s' not owned by %s.", path, folder.name, self.proxy_user)
-                continue
+            if not team_drive:
+                if my_folders_only and not owner_is_me(folder):
+                    # Only walk folders that I own.
+                    logger.info("Skipping folder '%s/%s' not owned by %s.", path, folder.name, self.proxy_user)
+                    continue
 
             if exclude_folders_named and folder.name in exclude_folders_named:
                 # Do not walk folders named as described.
@@ -313,10 +325,12 @@ class GoogleDriveClient(GoogleAdminClient):
                 continue
 
             file_entries = self.walk_tree(folder_id=folder.id,
+                                          team_drive_id=team_drive_id,
                                           depth=depth + 1,
                                           path=path + "/" + folder.name,
                                           max_depth=max_depth,
-                                          exclude_folders_named=exclude_folders_named)
+                                          exclude_folders_named=exclude_folders_named,
+                                          team_drive=team_drive)
             if not file_entries:
                 continue
 
@@ -324,7 +338,7 @@ class GoogleDriveClient(GoogleAdminClient):
 
         return all_files
 
-    def files(self, folder_id=None, after=None, before=None, page_token=None, previous_pages=None):
+    def files(self, folder_id=None, after=None, before=None, page_token=None, previous_pages=None, team_drive=False, depth=-1, team_drive_id=False):
         """
         Get all files matching the search parameters.
 
@@ -349,19 +363,26 @@ class GoogleDriveClient(GoogleAdminClient):
 
             if folder_id:
                 # Restrict files to the following containing folder(s).
-                if isinstance(folder_id, basestring):
+                if isinstance(folder_id, str):
                     q = "'{folder_id}' in parents and {q}".format(folder_id=folder_id, q=q)
                 elif isinstance(folder_id, (list, tuple)):
                     q = "(" + \
                         " or ".join("'{folder_id}' in parents".format(folder_id=f) for f in folder_id) + \
                         ") and {q}".format(q=q)
-                params = dict(includeTeamDriveItems=True, supportsTeamDrives=True,
+                params = dict(includeItemsFromAllDrives="true", supportsAllDrives="true", corpora="allDrives",
                               fields="files,nextPageToken,incompleteSearch,kind", q=q)
             else:
                 # Restrict files by owner.
                 q = "'{owner}' in owners and {q}".format(owner=self.proxy_user, q=q)
-                params = dict(includeTeamDriveItems=False, supportsTeamDrives=False,
+                params = dict(includeItemsFromAllDrives="true", supportsAllDrives="true", corpora="allDrives",
                               fields="files,nextPageToken,incompleteSearch,kind", q=q)
+
+            if team_drive:
+                params["driveId"] = team_drive_id
+                params["corpora"] = "drive"
+
+            if team_drive and depth == 0:
+                params["q"] = ""
 
         else:
             # Continue a previously run paginated query result.
@@ -407,18 +428,21 @@ class GoogleDriveClient(GoogleAdminClient):
             }
         else:
             # Continue a previously run paginated query result.
-            params = dict(pageToken=page_token)
+            params = dict(
+                pageToken=page_token,
+                useDomainAdminAccess=True,
+            )
 
         try:
-            request = self.client.teamdrives().list(**params)
+            request = self.client.drives().list(**params)
             response = self._execute_request(request)
         except:
             logger.exception("Failed to retrieve team drive list.")
             return None
 
         response = self.gdrive_team_drive_response.from_python(response)
-        if response.teamDrives:
-            team_drives = previous_pages + response.teamDrives
+        if response.drives:
+            team_drives = previous_pages + response.drives
         else:
             team_drives = previous_pages
 
